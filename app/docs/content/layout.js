@@ -15,7 +15,7 @@ const ContentLayout = ({ children }) => {
                     width={125}
                     height={94}
                     alt="Design System Logo"
-                    src="/images/logos/logo_designsystem.png"
+                    src={(process.env.NEXT_PUBLIC_BASE_PATH || "") + "/images/logos/logo_designsystem.png"}
                   />
                 </Link>
               </div>
