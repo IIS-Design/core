@@ -44,10 +44,27 @@ jobs:
           podman push ghcr.io/iis-design/core:main
 
           ssh -i /home/gha-runner/.ssh/id_ed25519_deploy -o BatchMode=yes nico@192.168.1.83 '
-            cd /srv/apps/core &&
-            docker compose pull &&
-            docker compose up -d &&
-            docker exec design-proxy wget -qO- http://core:3000/core/docs >/dev/null &&
-            docker exec design-proxy wget -qO- http://core:3000/core/docs/content/carousel >/dev/null &&
+            set -e
+            cd /srv/apps/core
+    
+            docker compose pull
+            docker compose up -d
+    
+            ready=0
+            for i in $(seq 1 30); do
+              if docker exec design-proxy wget -qO- http://core:3000/core/docs >/dev/null 2>&1; then
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+    
+            if [ "$ready" -ne 1 ]; then
+              echo "Core did not become ready in time"
+              docker compose logs --tail=50 core
+              exit 1
+            fi
+    
+            docker exec design-proxy wget -qO- http://core:3000/core/docs/content/carousel >/dev/null
             echo "Core production deploy OK"
           '
