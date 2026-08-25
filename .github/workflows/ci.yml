@@ -3,68 +3,15 @@ name: CI
 on:
   push:
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
-  container:
-    runs-on: [self-hosted, Linux, X64, ipsos-devops-01, opensuse, podman]
+  deploy:
+    permissions:
+      contents: read
+      packages: write
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    uses: IIS-Design/.github/.github/workflows/container-deploy.yml@main
 
-      - name: Build container
-        run: podman build -f Containerfile -t localhost/core-ci:${GITHUB_SHA} .
-
-      - name: Smoke test
-        run: |
-          podman rm -f core-ci >/dev/null 2>&1 || true
-          podman run -d --name core-ci -p 127.0.0.1:18084:3000 localhost/core-ci:${GITHUB_SHA}
-          sleep 2
-          curl --fail --silent http://127.0.0.1:18084/core/docs >/dev/null
-          curl --fail --silent http://127.0.0.1:18084/core/docs/content/carousel >/dev/null
-          podman rm -f core-ci
-          echo "Container smoke test passed"
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io --username "${{ github.actor }}" --password-stdin
-
-      - name: Publish SHA image
-        run: |
-          podman tag localhost/core-ci:${GITHUB_SHA} ghcr.io/iis-design/core:${GITHUB_SHA}
-          podman push ghcr.io/iis-design/core:${GITHUB_SHA}
-          echo "Published ghcr.io/iis-design/core:${GITHUB_SHA}"
-
-      - name: Publish main tag and deploy
-        if: github.ref == 'refs/heads/main'
-        run: |
-          podman tag localhost/core-ci:${GITHUB_SHA} ghcr.io/iis-design/core:main
-          podman push ghcr.io/iis-design/core:main
-
-          ssh -i /home/gha-runner/.ssh/id_ed25519_deploy -o BatchMode=yes nico@192.168.1.83 '
-            set -e
-            cd /srv/apps/core
-    
-            docker compose pull
-            docker compose up -d
-    
-            ready=0
-            for i in $(seq 1 30); do
-              if docker exec design-proxy wget -qO- http://core:3000/core/docs >/dev/null 2>&1; then
-                ready=1
-                break
-              fi
-              sleep 1
-            done
-    
-            if [ "$ready" -ne 1 ]; then
-              echo "Core did not become ready in time"
-              docker compose logs --tail=50 core
-              exit 1
-            fi
-    
-            docker exec design-proxy wget -qO- http://core:3000/core/docs/content/carousel >/dev/null
-            echo "Core production deploy OK"
-          '
+    with:
+      app: core
+      container-port: 3000
+      smoke-path: /core/docs/content/carousel
